@@ -1,0 +1,410 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Azure Strike</title>
+<hta:application id="app" applicationname="AzureStrike" border="thick" caption="yes" sysmenu="yes" singleinstance="yes" scroll="auto" maximizebutton="yes" minimizebutton="yes" />
+<script type="text/javascript">
+var sh = null;
+
+/* ====== Configure expected flags (optional) ======
+   If you want exact matches, put the real flag string here:
+   e.g., expectedFlags.s1 = "TBH{ABC123}";
+   Leave as "" (empty) to accept TBH{...} or FLAG{...} pattern.
+*/
+var expectedFlags = {
+  s1: "FLAG{TBH_VM_C0MM4Nd_3xEcU7i0n}",  // exact flag for Scenario 1 (optional)
+  s2: "FLAG{TBH_M4n4g3D_Id3nt17y}",      // exact flag for Scenario 2 (optional)
+  s3: "Flag TBH{Run_F0r5T_RuNB0oK}"		// exact flag for Scenario 3 (optional)
+};
+/* ================================================ */
+
+window.onload = function(){
+  try { sh = new ActiveXObject("WScript.Shell"); }
+  catch(e){ alert("ActiveX (WScript.Shell) not available. Open this .hta with mshta.exe and allow ActiveX.\n\n" + e.message); }
+  setPanelStatus("s1", false);
+  setPanelStatus("s2", false);
+  setPanelStatus("s3", false);
+};
+
+/* ----- helpers ----- */
+function getHtaFolder(){
+  // Convert file URL path to Windows path
+  try{
+    var p = unescape(location.pathname).replace(/\//g,'\\');
+    if (p.charAt(0) === '\\') p = p.substring(1);
+    p = p.split('?')[0].split('#')[0];
+    return p.substring(0, p.lastIndexOf('\\'));
+  }catch(e){
+    return ".";
+  }
+}
+
+/* Strip ANSI/VT sequences and control chars for clean display */
+function sanitizeOutput(s){
+  if(!s) return "";
+  s = s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  // CSI sequences
+  s = s.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "");
+  // OSC sequences
+  s = s.replace(/\u001b\][^\u0007\u001b]*(\u0007|\u001b\\)/g, "");
+  // Other control chars except \n and \t
+  s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+  return s;
+}
+
+/* Execute a pwsh command and capture stdout+stderr as text (synchronous) */
+function runCapturePwsh(psCmd){
+  if(!sh){ alert("Shell not available (ActiveX blocked)."); return ""; }
+
+  // Run from HTA folder so .\ScenarioX.ps1 resolves
+  sh.CurrentDirectory = getHtaFolder();
+
+  var q = psCmd.replace(/"/g, '\\"');
+
+  // Try pwsh on PATH first
+  try {
+    var e1 = sh.Exec('pwsh -NoProfile -ExecutionPolicy Bypass -Command "' + q + '"');
+    var out1 = e1.StdOut.ReadAll(); var err1 = ""; try { err1 = e1.StdErr.ReadAll(); } catch(_){}
+    return (out1 || "") + (err1 ? "\n" + err1 : "");
+  } catch(eA) {
+    // Fallback to default install location
+    try {
+      var e2 = sh.Exec('"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -Command "' + q + '"');
+      var out2 = e2.StdOut.ReadAll(); var err2 = ""; try { err2 = e2.StdErr.ReadAll(); } catch(_){}
+      return (out2 || "") + (err2 ? "\n" + err2 : "");
+    } catch(eB) {
+      // Final fallback: Windows PowerShell 5.x
+      try {
+        var e3 = sh.Exec('powershell -NoProfile -ExecutionPolicy Bypass -Command "' + q + '"');
+        var out3 = e3.StdOut.ReadAll(); var err3 = ""; try { err3 = e3.StdErr.ReadAll(); } catch(_){}
+        return (out3 || "") + (err3 ? "\n" + err3 : "");
+      } catch(eC) {
+        return "Error: No PowerShell host found (pwsh/powershell). Install PowerShell 7 or ensure powershell.exe is available.";
+      }
+    }
+  }
+}
+
+function ensureFileExists(fullPath){
+  try {
+    var fso = new ActiveXObject("Scripting.FileSystemObject");
+    return fso.FileExists(fullPath);
+  } catch(e) {
+    alert("FileSystemObject not available: " + e.message);
+    return false;
+  }
+}
+
+function setPanelStatus(key, isOn){
+  var panelSpan = document.getElementById("panel-" + key);
+  var topSpan   = document.getElementById("top-" + key);
+  var html = isOn ? "<b>ON</b>" : "<b>OFF</b>";
+  if (panelSpan) panelSpan.innerHTML = html;
+  if (topSpan)   topSpan.innerHTML   = html;
+}
+
+function safeTrim(s){ return (s || "").replace(/^\s+|\s+$/g, ""); }
+
+/* Shared flag submission handler */
+function submitFlag(key){
+  var input = document.getElementById("flag-" + key);
+  var msg   = document.getElementById("flagmsg-" + key);
+  if (!input || !msg) return;
+
+  var val = safeTrim(input.value);
+
+  // Exact flag check if configured; otherwise accept TBH{...} or FLAG{...}
+  var expected = expectedFlags[key] || "";
+  var ok = false;
+  if (expected && expected.length > 0){
+    ok = (val === expected);
+  } else {
+    ok = /^(?:TBH|FLAG)\{[A-Za-z0-9_\-]{4,64}\}$/.test(val);
+  }
+
+  if (ok){
+    msg.innerText = "Flag accepted \u2713";
+    msg.style.color = "#4ade80"; // green-ish
+  } else {
+    msg.innerText = "Incorrect flag \u2717";
+    msg.style.color = "#ff6b6b"; // red-ish
+  }
+}
+
+/* ----- Scenario 1 ----- */
+function runScenario1(){
+  var path = getHtaFolder() + "\\Scenario1.ps1";
+  if (!ensureFileExists(path)) { alert("Script not found:\n" + path); return; }
+  var ps = "$ErrorActionPreference='Stop';" +
+           "$ConfirmPreference='None';" +
+           "$ProgressPreference='SilentlyContinue';" +
+           "$env:NO_COLOR='1';" +
+           "try{ $PSStyle.OutputRendering='PlainText' }catch{};" +
+           "& .\\Scenario1.ps1 *>&1 | Out-String -Width 4096";
+
+  // Run but ignore normal output; show only requested summary
+  runCapturePwsh(ps);
+
+  var msg = document.getElementById("msg-s1");
+  if (msg){
+    msg.innerText =
+      "Here is you Initial Access:\n" +
+      "\"alice.hill@tropicanabayhotels.com\"\n" +
+      "\"bob.smith@tropicanabayhotels.com\"\n" +
+      "\"carol.lee@tropicanabayhotels.com\"\n" +
+      "\"david.jones@tropicanabayhotels.com\"\n" +
+      "\"erin.brown@tropicanabayhotels.com\"\n" +
+      "\"frank.wright@tropicanabayhotels.com\"\n" +
+      "\"grace.chen@tropicanabayhotels.com\"\n" +
+      "\"henry.kim@tropicanabayhotels.com\"\n" +
+      "\"isabel.lopez@tropicanabayhotels.com\"\n" +
+      "\"ethan.winters@tropicanabayhotels.com\"";
+  }
+  setPanelStatus("s1", true);
+}
+
+/* ----- Scenario 2 ----- */
+
+function extractStaticSiteUrl(text){
+  // Prefer the line: "Static website for 'X' is live at: https://...web.core.windows.net/"
+  var m = text.match(/Static website\b[^:\n]*:\s*(https?:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.web\.core\.windows\.net(?:\/[^\s"'<>]*)?)/i);
+  if (m && m[1]) return m[1];
+
+  // Fallback: any Azure Static Website endpoint in the output
+  m = text.match(/https?:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.web\.core\.windows\.net(?:\/[^\s"'<>]*)?/i);
+  if (m && m[0]) return m[0];
+
+  return null;
+}
+
+function runScenario2(){
+  var path = getHtaFolder() + "\\Scenario2.ps1";
+  if (!ensureFileExists(path)) { alert("Script not found:\n" + path); return; }
+  var ps = "$ErrorActionPreference='Stop';" +
+           "$ConfirmPreference='None';" +
+           "$ProgressPreference='SilentlyContinue';" +
+           "$env:NO_COLOR='1';" +
+           "try{ $PSStyle.OutputRendering='PlainText' }catch{};" +
+           "& .\\Scenario2.ps1 *>&1 | Out-String -Width 4096";
+
+  // Run and parse ONLY for the static website URL
+  var text = runCapturePwsh(ps);
+  var clean = sanitizeOutput(text);
+  var url = extractStaticSiteUrl(clean) || "[No Azure Static Website URL detected]";
+
+  var msg = document.getElementById("msg-s2");
+  if (msg){
+    msg.innerText = "Here is you initial access:\n" + url;
+  }
+  setPanelStatus("s2", true);
+}
+
+/* ----- Scenario 3 ----- */
+function extractFqdnFromPwshOutput(text) {
+  if (!text) return null;
+
+  // Case 1: JSON-like block … "Fqdn": "name.region.cloudapp.azure.com"
+  var m = /"Fqdn"\s*:\s*"([^"]+)"/i.exec(text);
+  if (m && m[1]) return m[1];
+
+  // Case 2: key/value style … Fqdn : name.region.cloudapp.azure.com
+  m = /\bFqdn\b[^:]*:\s*([A-Za-z0-9.-]+)/i.exec(text);
+  if (m && m[1]) return m[1];
+
+  // Case 3: bare hostname ending with cloudapp.azure.com
+  m = /\b([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.cloudapp\.azure\.com)\b/i.exec(text);
+  if (m && m[1]) return m[1];
+
+  return null;
+}
+
+/* ----- Scenario 3 ----- */
+function runScenario3(){
+  var path = getHtaFolder() + "\\Scenario3.ps1";
+  if (!ensureFileExists(path)) { alert("Script not found:\n" + path); return; }
+
+  var ps = "$ErrorActionPreference='Stop';" +
+           "$ConfirmPreference='None';" +
+           "$ProgressPreference='SilentlyContinue';" +
+           "$env:NO_COLOR='1';" +
+           "try{ $PSStyle.OutputRendering='PlainText' }catch{};" +
+           "& .\\Scenario3.ps1 *>&1 | Out-String -Width 4096";
+
+  // Run and capture all stdout/stderr from PowerShell
+  var output = runCapturePwsh(ps);
+
+  // Parse FQDN from the captured output
+  var fqdn = extractFqdnFromPwshOutput(output);
+
+  // Update UI in the same style as previous scenarios
+  var msg = document.getElementById("msg-s3");
+  if (msg){
+    if (fqdn) {
+      msg.innerText = "Here is your Initial Access:\n" + fqdn;
+    } else {
+      msg.innerText = "Scenario 3 completed. (FQDN not found in output)";
+    }
+  }
+  setPanelStatus("s3", true);
+}
+
+/* ---------Hint Toggle ------------ */
+function toggleHint(key){
+  var hint = document.getElementById("hint-" + key);
+  var btn  = document.getElementById("hintbtn-" + key);
+  if (!hint || !btn) return;
+  if (hint.style.display === "none") {
+    hint.style.display = "block";
+    btn.innerText = "Hide Hint";
+  } else {
+    hint.style.display = "none";
+    btn.innerText = "Show Hint";
+  }
+}
+</script>
+</head>
+
+<!-- Dark background + light text using legacy attributes (HTA-friendly) -->
+<body bgcolor="#0b0f14" text="#e8f0ff" link="#9db5da" vlink="#9db5da" alink="#ffffff">
+
+<!-- Header / Logo -->
+<table width="100%" border="0" cellspacing="0" cellpadding="8">
+  <tr>
+    <td align="center">
+      <table border="1" cellpadding="10" cellspacing="0" bgcolor="#0f1723" bordercolor="#1d355e">
+        <tr><td align="center"><font size="5"><b>Azure Strike</b></font></td></tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- Description -->
+<table width="100%" border="0" cellspacing="0" cellpadding="6">
+  <tr><td align="center">
+    An HTA file that builds 3 scenarios for Red Team Azure Engagements
+  </td></tr>
+</table>
+
+<!-- Status bar -->
+<table width="100%" border="0" cellspacing="0" cellpadding="8">
+  <tr>
+    <td align="center">
+      <table border="1" cellpadding="8" cellspacing="0" bgcolor="#0d1a2f" bordercolor="#2a4f84">
+        <tr>
+          <td>Scenario 1: <b><span id="top-s1">OFF</span></b></td>
+          <td>Scenario 2: <b><span id="top-s2">OFF</span></b></td>
+          <td>Scenario 3: <b><span id="top-s3">OFF</span></b></td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- Grid (3 panels centered in middle row) -->
+<table width="100%" border="0" cellspacing="12" cellpadding="10">
+  <!-- top row placeholders -->
+  <tr>
+    <td width="33%" align="center">&nbsp;</td>
+    <td width="33%" align="center">&nbsp;</td>
+    <td width="33%" align="center">&nbsp;</td>
+  </tr>
+
+  <!-- middle row: three scenario panels -->
+  <tr>
+    <!-- Scenario 1 -->
+    <td align="center" valign="top">
+      <table width="90%" border="1" cellpadding="10" cellspacing="0" bgcolor="#0f1723" bordercolor="#1d355e">
+        <tr><td align="center"><b>Scenario 1</b> — <span id="panel-s1"><b>OFF</b></span></td></tr>
+        <tr><td>
+          <i>A new user joined with weak credentials. Once in, see what their access already exposes.</i><br/>
+          <button id="hintbtn-s1" onclick="toggleHint('s1')" style="margin-top:6px;background-color:#000000;color:#1e90ff;border:2px solid #1e90ff;padding:4px 10px;">Show Hint</button>
+          <div id="hint-s1" style="display:none;margin-top:6px;color:#9db5da;font-size:12px;">
+            <b>Hint:</b> Think weak/guessable passwords and the resources the user can already read.
+          </div>
+        </td></tr>
+        <tr><td align="center">
+          <button onclick="runScenario1()" style="background-color:#000000; color:#1e90ff; border:2px solid #1e90ff; padding:8px 14px;">RUN SCENARIO 1</button>
+        </td></tr>
+        <tr><td>
+          <div id="msg-s1" style="white-space:pre-wrap;font-family:Consolas,monospace;background-color:#0d1a2f;color:#e8f0ff;border:1px solid #2a4f84;padding:8px;min-height:40px;"></div>
+        </td></tr>
+        <tr><td>
+          Enter Flag:
+          <input id="flag-s1" type="text" style="width:65%; background-color:#0d1a2f; color:#e8f0ff; border:1px solid #2a4f84;">
+          <button onclick="submitFlag('s1')" style="background-color:#000000; color:#1e90ff; border:2px solid #1e90ff; padding:4px 10px; margin-left:6px;">SUBMIT FLAG</button>
+          <div id="flagmsg-s1" style="margin-top:6px;color:#9db5da;font-size:12px;"></div>
+        </td></tr>
+      </table>
+    </td>
+
+    <!-- Scenario 2 -->
+    <td align="center" valign="top">
+      <table width="90%" border="1" cellpadding="10" cellspacing="0" bgcolor="#0f1723" bordercolor="#1d355e">
+        <tr><td align="center"><b>Scenario 2</b> — <span id="panel-s2"><b>OFF</b></span></td></tr>
+        <tr><td>
+          <i>You found a vulnerable web page hosted on Azure. Can you reach the flag?</i><br/>
+          <button id="hintbtn-s2" onclick="toggleHint('s2')" style="margin-top:6px;background-color:#000000;color:#1e90ff;border:2px solid #1e90ff;padding:4px 10px;">Show Hint</button>
+          <div id="hint-s2" style="display:none;margin-top:6px;color:#9db5da;font-size:12px;">
+            <b>Hint:</b> Jinja SSTI → run code in the template context and read what the app can touch (e.g., DB).
+          </div>
+        </td></tr>
+        <tr><td align="center">
+          <button onclick="runScenario2()" style="background-color:#000000; color:#1e90ff; border:2px solid #1e90ff; padding:8px 14px;">RUN SCENARIO 2</button>
+        </td></tr>
+        <tr><td>
+          <div id="msg-s2" style="white-space:pre-wrap;font-family:Consolas,monospace;background-color:#0d1a2f;color:#e8f0ff;border:1px solid #2a4f84;padding:8px;min-height:40px;"></div>
+        </td></tr>
+        <tr><td>
+          Enter Flag:
+          <input id="flag-s2" type="text" style="width:65%; background-color:#0d1a2f; color:#e8f0ff; border:1px solid #2a4f84;">
+          <button onclick="submitFlag('s2')" style="background-color:#000000; color:#1e90ff; border:2px solid #1e90ff; padding:4px 10px; margin-left:6px;">SUBMIT FLAG</button>
+          <div id="flagmsg-s2" style="margin-top:6px;color:#9db5da;font-size:12px;"></div>
+        </td></tr>
+      </table>
+    </td>
+
+    <!-- Scenario 3 -->
+    <td align="center" valign="top">
+      <table width="90%" border="1" cellpadding="10" cellspacing="0" bgcolor="#0f1723" bordercolor="#1d355e">
+        <tr><td align="center"><b>Scenario 3</b> — <span id="panel-s3"><b>OFF</b></span></td></tr>
+        <tr><td>
+          <i>Another web app vulnerability this time you’ll need more than Windows and Azure.</i><br/>
+          <button id="hintbtn-s3" onclick="toggleHint('s3')" style="margin-top:6px;background-color:#000000;color:#1e90ff;border:2px solid #1e90ff;padding:4px 10px;">Show Hint</button>
+          <div id="hint-s3" style="display:none;margin-top:6px;color:#9db5da;font-size:12px;">
+            <b>Hint:</b> Use RCE to land on a Linux VM, then leverage its ability to interact with an Automation runbook.
+          </div>
+        </td></tr>
+        <tr><td align="center">
+          <button onclick="runScenario3()" style="background-color:#000000; color:#1e90ff; border:2px solid #1e90ff; padding:8px 14px;">RUN SCENARIO 3</button>
+        </td></tr>
+        <tr><td>
+          <div id="msg-s3" style="white-space:pre-wrap;font-family:Consolas,monospace;background-color:#0d1a2f;color:#e8f0ff;border:1px solid #2a4f84;padding:8px;min-height:40px;"></div>
+        </td></tr>
+        <tr><td>
+          Enter Flag:
+          <input id="flag-s3" type="text" style="width:65%; background-color:#0d1a2f; color:#e8f0ff; border:1px solid #2a4f84;">
+          <button onclick="submitFlag('s3')" style="background-color:#000000; color:#1e90ff; border:2px solid #1e90ff; padding:4px 10px; margin-left:6px;">SUBMIT FLAG</button>
+          <div id="flagmsg-s3" style="margin-top:6px;color:#9db5da;font-size:12px;"></div>
+        </td></tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- bottom row placeholders -->
+  <tr>
+    <td align="center">&nbsp;</td>
+    <td align="center">&nbsp;</td>
+    <td align="center">&nbsp;</td>
+  </tr>
+</table>
+
+<!-- Footer hint -->
+<table width="100%" border="0" cellspacing="0" cellpadding="6">
+  <tr><td align="center">
+		Author: dmcxblue
+  </td></tr>
+</table>
+
+</body>
+</html>
